@@ -13,21 +13,25 @@ def render_reply(
     if opener:
         lines.append(opener)
     lines.append("")
+    # One numbered source per URL: a fact-check record and the fetched article often share a link.
     order: list[str] = []
+    first_ev: dict[str, str] = {}
     for reason in draft.reasons:
         refs = []
         for c in reason.citations:
-            if c.evidence_id not in order:
-                order.append(c.evidence_id)
-            refs.append(order.index(c.evidence_id) + 1)
+            url = evidence[c.evidence_id].url
+            if url not in order:
+                order.append(url)
+                first_ev[url] = c.evidence_id
+            refs.append(order.index(url) + 1)
         marks = "".join(f"[{n}]" for n in sorted(set(refs)))
         lines.append(f"• {reason.text.strip()} {marks}")
     if order:
         lines.append("")
         lines.append(t(lang, "sources"))
-        for n, eid in enumerate(order, 1):
-            ev = evidence[eid]
-            lines.append(f"[{n}] {ev.publisher or ''} {ev.url}".replace("  ", " "))
+        for n, url in enumerate(order, 1):
+            ev = evidence[first_ev[url]]
+            lines.append(f"[{n}] {ev.publisher or ''} {url}".replace("  ", " "))
     lines.append("")
     lines.append(t(lang, "next_step", v))
     if truncated:

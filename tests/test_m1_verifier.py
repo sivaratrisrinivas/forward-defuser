@@ -158,3 +158,21 @@ def test_true_blocked_when_any_factcheck_rated_false():
     official = ev("E2", Tier.OFFICIAL, Label.SUPPORTS, text=FC_TEXT)
     d = draft(Verdict.TRUE, eid="E2")
     assert "verdict_inconsistent" in codes(verify(d, {"E1": rec, "E2": official}))
+
+
+def test_sources_sharing_a_url_are_listed_once():
+    from defuser.render import render_reply
+
+    first = ev("E1")
+    twin = first.model_copy(update={"evidence_id": "E2", "kind": "factcheck"})
+    q = "all ten rupee coins in circulation are legal tender and must be accepted"
+    d = Draft(
+        verdict=Verdict.FALSE,
+        confidence=0.9,
+        reasons=[
+            Reason(text="One.", citations=[Citation(evidence_id="E1", quote=q)]),
+            Reason(text="Two.", citations=[Citation(evidence_id="E2", quote=q)]),
+        ],
+    )
+    out = render_reply(d, {"E1": first, "E2": twin}, "en", seed="s")
+    assert out.count(first.url) == 1 and "• One. [1]" in out and "• Two. [1]" in out
