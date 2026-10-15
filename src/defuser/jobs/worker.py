@@ -54,6 +54,9 @@ async def run_worker(stop: asyncio.Event, concurrency: int | None = None, idle_s
     import defuser.handlers  # noqa: F401 - registers handlers
 
     pool = await get_pool()
+    from defuser.followup import schedule_maintenance
+
+    await schedule_maintenance(pool)  # idempotent per day
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
     sem = asyncio.Semaphore(concurrency or get_settings().worker_concurrency)
     tasks: set[asyncio.Task] = set()

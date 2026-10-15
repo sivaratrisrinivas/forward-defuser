@@ -14,7 +14,7 @@ from defuser.channels.registry import get_channel
 from defuser.checker import Checker
 from defuser.i18n import resolve
 from defuser.llm.provider import get_llm
-from defuser.models import ChatRef
+from defuser.models import ChatRef, Verdict
 from defuser.normalize.fetch import Fetcher
 from defuser.normalize.message import normalize_event
 from defuser.normalize.text import guess_lang
@@ -145,8 +145,19 @@ async def process_inbound_message(pool: asyncpg.Pool, inbound_id: int) -> None:
 
 
 async def after_reply(pool, res, msg, chat, inbound_id) -> None:
-    """Follow-ups, clustering alerts (M4)."""
-    return None
+    """Remember who asked (for viral alerts), schedule re-checks for UNVERIFIED claims, alert admins on spikes.
+    Failures here must not fail the job: the reply is already sent."""
+    from defuser import followup
+
+    if res.claim_id is None or res.kind != "checked":
+        return
+    try:
+        await followup.subscribe(pool, res.claim_id, msg.user_hash, chat, res.lang, res.verdict)
+        if res.verdict == Verdict.UNVERIFIED:
+            await followup.schedule_rechecks(pool, res.claim_id)
+        await followup.maybe_alert_viral(pool, res.claim_id)
+    except Exception:  # noqa: BLE001
+        log.exception("after_reply failed for inbound %s", inbound_id)
 
 
 async def _mark_done(pool: asyncpg.Pool, inbound_id: int) -> None:

@@ -112,6 +112,22 @@ A Fly.io config is in `deploy/fly/fly.toml`.
   wrong in both directions, so reuse now needs a cheap-model sameness confirmation on top of a lower candidate
   threshold.
 
+### M4 — follow-ups, viral alerts, retention
+
+- Every checked claim records who asked (hashed user id, language, verdict sent). Only UNVERIFIED answers keep an
+  encrypted pointer to the chat, and retention clears it after 4 days; verified answers keep none.
+- UNVERIFIED claims get re-check jobs at 6, 24 and 72 hours (`FOLLOWUP_HOURS`). When a re-check finds a verdict,
+  everyone still waiting gets one "📢 Update" message in their own language (composed once per language, verified
+  as usual). Keys `recheck:{claim}:{h}` and `followup:{claim}:{user}:{verdict}` make re-runs and duplicate jobs
+  harmless; a still-UNVERIFIED re-check sends nothing.
+- Viral alert: when `VIRAL_THRESHOLD_24H` people ask about one claim in 24 hours, one alert per claim per day
+  goes to `ADMIN_TELEGRAM_CHAT_ID` and the admin_alerts table.
+- `/forget` deletes the person's asks, so no follow-up reaches them. A daily `maintenance` job (seeded when a
+  worker starts) applies `RETENTION_DAYS` to runs, inbound messages, asks, outbox and finished jobs.
+- **What broke:** the re-check went through `cache.record`, which counts an ask, so every re-check inflated the
+  claim's ask count and could trip the viral alert on its own; re-checks now take that count back. The first
+  design also stored a chat pointer for every ask, which is more personal data than a verified answer needs.
+
 ## Eval results
 
 Offline mode (frozen evidence, deterministic baseline policy instead of Claude; latency and cost are from stub
