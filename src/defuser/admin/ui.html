@@ -74,7 +74,7 @@ function card(k, v) { const c = el('div', null, 'card'); c.append(el('div', k, '
 function chart(hourly) {
   const svg = $('chart'); svg.replaceChildren();
   if (!hourly.length) { const t = document.createElementNS('http://www.w3.org/2000/svg', 'text'); t.setAttribute('x', 8); t.setAttribute('y', 20); t.textContent = 'No checks in this window'; svg.append(t); return; }
-  const w = svg.clientWidth || 800, h = 140, pad = 20, n = hourly.length, bw = Math.max(2, (w - pad) / n - 2);
+  const w = svg.clientWidth || 800, h = 140, pad = 20, n = hourly.length, bw = Math.min(36, Math.max(2, (w - pad) / n - 2));
   const maxC = Math.max(...hourly.map(x => x.checks), 1), maxL = Math.max(...hourly.map(x => x.p95 || 0), 1);
   const ns = 'http://www.w3.org/2000/svg';
   let pts = [];
@@ -85,6 +85,7 @@ function chart(hourly) {
     const tt = document.createElementNS(ns, 'title'); tt.textContent = `${x.hour}: ${x.checks} checks, p95 ${Math.round(x.p95 || 0)} ms, $${x.cost.toFixed(4)}`; r.append(tt);
     svg.append(r); pts.push(`${xi + bw / 2},${h - pad - (h - pad) * (x.p95 || 0) / maxL}`);
   });
+  if (pts.length === 1) { const [cx, cy] = pts[0].split(','); const dot = document.createElementNS(ns, 'circle'); dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('r', 3); dot.setAttribute('fill', 'var(--false)'); svg.append(dot); }
   const pl = document.createElementNS(ns, 'polyline'); pl.setAttribute('points', pts.join(' ')); pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', 'var(--false)'); pl.setAttribute('stroke-width', '1.5'); svg.append(pl);
   const lab = document.createElementNS(ns, 'text'); lab.setAttribute('x', pad); lab.setAttribute('y', 10); lab.textContent = `bars: checks (max ${maxC}) · line: p95 latency (max ${Math.round(maxL)} ms)`; svg.append(lab);
 }
