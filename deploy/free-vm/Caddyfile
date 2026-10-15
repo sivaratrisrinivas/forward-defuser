@@ -1,0 +1,8 @@
+{$SITE_DOMAIN} {
+	# Only the webhooks, health check and admin are exposed; /metrics stays internal.
+	@public path /webhooks/* /healthz /admin /admin/*
+	handle @public {
+		reverse_proxy app:8080
+	}
+	respond "not found" 404
+}

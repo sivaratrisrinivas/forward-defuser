@@ -1,0 +1,41 @@
+# One small always-on VM (Oracle Cloud Always Free, or any Linux box with Docker): Postgres+pgvector, Redis, the app
+# (API and worker in one process, ROLE=all) and Caddy for automatic HTTPS, which Telegram and Meta require.
+# Run from the repo root:  docker compose -f deploy/free-vm/docker-compose.yml --env-file .env up -d --build
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: fd
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "fd"], interval: 5s, retries: 30 }
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+  app:
+    build: { context: ../.., dockerfile: Dockerfile }
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: postgresql://fd:${POSTGRES_PASSWORD}@db:5432/fd
+      REDIS_URL: redis://redis:6379/0
+      ROLE: all
+      DB_POOL_SIZE: "12"
+    depends_on: { db: { condition: service_healthy }, redis: { condition: service_started } }
+    expose: ["8080"]
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env (a hostname pointing at this VM)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on: [app]
+volumes:
+  dbdata:
+  caddydata:

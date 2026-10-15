@@ -25,6 +25,12 @@ Tests need Postgres with pgvector and Redis (`docker compose up -d db redis`, th
 uv run pytest -q
 ```
 
+## Deploy for free (one VM)
+
+The recommended free route is one always-on VM (Oracle Cloud Always Free, or any Linux box with Docker) running
+Postgres with pgvector, Redis, the app and Caddy for HTTPS, all from one compose file. Step by step in
+[deploy/free-vm/README.md](deploy/free-vm/README.md). Cloud Run and Fly.io configs remain for paid hosting.
+
 ## Deploy (Cloud Run)
 
 1. Create a GCP project, a Cloud SQL Postgres 16 instance (enable the `vector` extension, which Cloud SQL
@@ -213,7 +219,7 @@ rumour get the same answer in every language in production.
 
 | Item | Status |
 |---|---|
-| Deployed | Not yet: needs a cloud account, bot token and API keys (see "What you need to provide") |
+| Deployed | Not yet: needs a VM (or cloud account), bot token and API keys (see "What you need to provide") |
 | 100% citation validity | Yes in every eval mode, including a fully hijacked model |
 | Survives the chaos list | Yes: `tests/test_m6_chaos.py` and the load test |
 | Cost and latency dashboard | `/admin` (plus Prometheus metrics) |
@@ -224,8 +230,7 @@ rumour get the same answer in every language in production.
 
 1. A Telegram bot token from @BotFather, and the bot's username.
 2. An Anthropic API key.
-3. A Google Cloud project with billing (Cloud Run, Cloud SQL Postgres 16, Memorystore Redis, Secret Manager,
-   Artifact Registry), or a Fly.io account (`deploy/fly/fly.toml`).
+3. Somewhere to run it: a free always-on VM (`deploy/free-vm/`), or paid hosting (Cloud Run, Fly.io).
 4. A Google API key with the Fact Check Tools API enabled (and Vision and Speech-to-Text for photos and voice notes).
 5. Optional: a Brave Search API key, a Safe Browsing or Web Risk key, a WhatsApp Cloud API app (access token, app
    secret, verify token, phone number id), and a Telegram chat id for admin alerts.
