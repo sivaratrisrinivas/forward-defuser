@@ -83,13 +83,17 @@ async def test_update_is_in_the_askers_language(clean, tg):
 
 
 async def test_forget_stops_followups(clean, tg):
-    await _run(clean, happy_script(bad_drafts=2), event(mid="1"))
-    await _run(clean, happy_script(), event(text="/forget", mid="2").model_copy(update={"command": "forget"}))
+    # Private chat: Telegram's chat id equals the user id.
+    await _run(clean, happy_script(bad_drafts=2), event(mid="1", chat_id="5"))
+    forget = event(text="/forget", mid="2", chat_id="5").model_copy(update={"command": "forget"})
+    await _run(clean, happy_script(), forget)
     await _due(clean)
     await _run(clean, happy_script())
     assert [m[1] for m in tg.sent][-1].startswith("Done.")
     assert len(tg.sent) == 2
     assert await clean.fetchval("SELECT count(*) FROM claim_asks") == 0
+    keys = [r["idempotency_key"] for r in await clean.fetch("SELECT idempotency_key FROM outbox")]
+    assert keys == ["reply:2"]  # the first reply's record is gone; only the forget confirmation remains
 
 
 async def test_verified_reply_keeps_no_chat_pointer(clean, tg):

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Defuser admin</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#5d6670; --line:#e3e6ea; --accent:#2f6fde;
+          --false:#c62828; --scam:#8e24aa; --mis:#ef6c00; --true:#2e7d32; --sat:#00838f; --unv:#78909c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111418; --card:#1a1e24; --ink:#e7eaee; --muted:#9aa4ae; --line:#2a3038; --accent:#6ea0ff; }
+  }
+  * { box-sizing:border-box }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink) }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); flex-wrap:wrap }
+  header h1 { font-size:16px; margin:0 auto 0 0 }
+  main { max-width:1100px; margin:0 auto; padding:16px }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px }
+  .k { color:var(--muted); font-size:12px } .v { font-size:22px; font-weight:600; font-variant-numeric:tabular-nums }
+  h2 { font-size:14px; margin:20px 0 8px }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top }
+  th { font-size:12px; color:var(--muted); font-weight:500 }
+  tr.sel td { background:color-mix(in srgb, var(--accent) 10%, transparent) }
+  button, select, input { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink) }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent) }
+  .bar { display:flex; height:22px; border-radius:6px; overflow:hidden; border:1px solid var(--line) }
+  .bar span { display:block; height:100% }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; margin-top:6px; color:var(--muted); font-size:12px }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px }
+  pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:8px; border-radius:6px; max-height:280px; overflow:auto }
+  .muted { color:var(--muted) } .err { color:var(--false) }
+  #detail { margin-top:12px }
+  svg text { fill:var(--muted); font-size:10px }
+</style>
+</head>
+<body>
+<header>
+  <h1>Forward Defuser · admin</h1>
+  <select id="hours" aria-label="Window"><option value="24">Last 24 hours</option><option value="168">Last 7 days</option><option value="720">Last 30 days</option></select>
+  <input id="token" type="password" placeholder="Admin token" autocomplete="off" aria-label="Admin token">
+  <button class="primary" id="go">Load</button>
+</header>
+<main>
+  <p id="msg" class="muted">Enter the admin token to load the dashboard.</p>
+  <section id="dash" hidden>
+    <div class="grid" id="cards"></div>
+    <h2>Verdicts</h2>
+    <div class="card"><div class="bar" id="vbar"></div><div class="legend" id="vlegend"></div></div>
+    <h2>Checks and p95 latency per hour</h2>
+    <div class="card"><svg id="chart" width="100%" height="140" role="img" aria-label="Checks per hour"></svg></div>
+    <h2>Review queue</h2>
+    <table><thead><tr><th>When</th><th>Claim</th><th>Sent</th><th>Why</th><th>Asks</th></tr></thead><tbody id="reviews"></tbody></table>
+    <div id="detail"></div>
+  </section>
+</main>
+<script>
+const COLORS = {FALSE:'var(--false)', SCAM:'var(--scam)', MISLEADING:'var(--mis)', TRUE:'var(--true)', SATIRE:'var(--sat)', UNVERIFIED:'var(--unv)'};
+const $ = (id) => document.getElementById(id);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = String(text); if (cls) e.className = cls; return e; };
+try { $('token').value = sessionStorage.getItem('defuser_admin') || ''; } catch (e) {}
+
+async function api(path, opts = {}) {
+  const r = await fetch('/admin' + path, {...opts, headers: {'Authorization': 'Bearer ' + $('token').value, 'Content-Type': 'application/json'}});
+  if (r.status === 401) throw new Error('Wrong token');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function card(k, v) { const c = el('div', null, 'card'); c.append(el('div', k, 'k'), el('div', v, 'v')); return c; }
+
+function chart(hourly) {
+  const svg = $('chart'); svg.replaceChildren();
+  if (!hourly.length) { const t = document.createElementNS('http://www.w3.org/2000/svg', 'text'); t.setAttribute('x', 8); t.setAttribute('y', 20); t.textContent = 'No checks in this window'; svg.append(t); return; }
+  const w = svg.clientWidth || 800, h = 140, pad = 20, n = hourly.length, bw = Math.max(2, (w - pad) / n - 2);
+  const maxC = Math.max(...hourly.map(x => x.checks), 1), maxL = Math.max(...hourly.map(x => x.p95 || 0), 1);
+  const ns = 'http://www.w3.org/2000/svg';
+  let pts = [];
+  hourly.forEach((x, i) => {
+    const r = document.createElementNS(ns, 'rect'), bh = (h - pad) * x.checks / maxC, xi = pad + i * (bw + 2);
+    r.setAttribute('x', xi); r.setAttribute('y', h - pad - bh); r.setAttribute('width', bw); r.setAttribute('height', bh);
+    r.setAttribute('fill', 'var(--accent)'); r.setAttribute('opacity', '0.35');
+    const tt = document.createElementNS(ns, 'title'); tt.textContent = `${x.hour}: ${x.checks} checks, p95 ${Math.round(x.p95 || 0)} ms, $${x.cost.toFixed(4)}`; r.append(tt);
+    svg.append(r); pts.push(`${xi + bw / 2},${h - pad - (h - pad) * (x.p95 || 0) / maxL}`);
+  });
+  const pl = document.createElementNS(ns, 'polyline'); pl.setAttribute('points', pts.join(' ')); pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', 'var(--false)'); pl.setAttribute('stroke-width', '1.5'); svg.append(pl);
+  const lab = document.createElementNS(ns, 'text'); lab.setAttribute('x', pad); lab.setAttribute('y', 10); lab.textContent = `bars: checks (max ${maxC}) · line: p95 latency (max ${Math.round(maxL)} ms)`; svg.append(lab);
+}
+
+async function load() {
+  try { sessionStorage.setItem('defuser_admin', $('token').value); } catch (e) {}
+  $('msg').textContent = 'Loading…'; $('msg').className = 'muted';
+  try {
+    const s = await api('/stats?hours=' + $('hours').value);
+    $('cards').replaceChildren(
+      card('Checks', s.checks), card('p50 latency', (s.latency_p50_ms / 1000).toFixed(1) + ' s'), card('p95 latency', (s.latency_p95_ms / 1000).toFixed(1) + ' s'),
+      card('Cost per check', '$' + s.cost_per_check_usd.toFixed(4)), card('Total cost', '$' + s.cost_total_usd.toFixed(2)),
+      card('Cache hit rate', Math.round(s.cache_hit_rate * 100) + '%'), card('Verifier pass', s.verifier_pass_rate == null ? '–' : Math.round(s.verifier_pass_rate * 100) + '%'),
+      card('Open reviews', s.review_open), card('Queue / dead jobs', s.queue_depth + ' / ' + s.dead_jobs));
+    const total = Object.values(s.verdicts).reduce((a, b) => a + b, 0) || 1;
+    $('vbar').replaceChildren(); $('vlegend').replaceChildren();
+    for (const [v, n] of Object.entries(s.verdicts)) {
+      const sp = el('span'); sp.style.width = (100 * n / total) + '%'; sp.style.background = COLORS[v] || 'gray'; sp.title = `${v}: ${n}`; $('vbar').append(sp);
+      const lg = el('span'); const d = el('span', null, 'dot'); d.style.background = COLORS[v] || 'gray'; lg.append(d, document.createTextNode(`${v} ${n}`)); $('vlegend').append(lg);
+    }
+    chart(s.hourly);
+    const items = await api('/reviews?status=open');
+    const tb = $('reviews'); tb.replaceChildren();
+    if (!items.length) { const tr = el('tr'); const td = el('td', 'Nothing to review.', 'muted'); td.colSpan = 5; tr.append(td); tb.append(tr); }
+    for (const it of items) {
+      const tr = el('tr'); tr.style.cursor = 'pointer';
+      tr.append(el('td', new Date(it.created_at).toLocaleString()), el('td', it.canonical_text || '(no claim)'), el('td', it.verdict), el('td', it.reason), el('td', it.ask_count ?? ''));
+      tr.onclick = () => { [...tb.children].forEach(r => r.classList.remove('sel')); tr.classList.add('sel'); detail(it.id); };
+      tb.append(tr);
+    }
+    $('dash').hidden = false; $('msg').textContent = '';
+  } catch (e) { $('msg').textContent = e.message; $('msg').className = 'err'; }
+}
+
+async function detail(id) {
+  const d = await api('/reviews/' + id), box = $('detail'); box.replaceChildren();
+  const c = el('div', null, 'card');
+  c.append(el('h2', 'Claim'), el('div', d.canonical_text || ''), el('h2', `Sent ${d.verdict} (confidence ${d.confidence ?? '–'}) · flagged because: ${d.reason}`));
+  const tr = d.trace || {};
+  if (tr.investigator) c.append(el('h2', 'Investigator wanted'), el('pre', JSON.stringify(tr.investigator, null, 2)));
+  if (tr.draft) c.append(el('h2', 'Draft'), el('pre', JSON.stringify(tr.draft, null, 2)));
+  if (tr.verifier) c.append(el('h2', 'Verifier'), el('pre', JSON.stringify(tr.verifier, null, 2)));
+  c.append(el('h2', 'Evidence'));
+  for (const e of d.evidence) {
+    const p = el('pre'); p.textContent = `${e.evidence_id} [${e.tier}${e.label ? ', ' + e.label : ''}] ${e.publisher || ''}\n${e.url}\n\n${e.text}`; c.append(p);
+  }
+  const row = el('div'); row.style.display = 'flex'; row.style.gap = '8px'; row.style.flexWrap = 'wrap'; row.style.marginTop = '12px';
+  const ok = el('button', 'Approve as sent', 'primary');
+  const sel = el('select'); for (const v of ['FALSE', 'MISLEADING', 'TRUE', 'SATIRE', 'SCAM', 'UNVERIFIED']) { const o = el('option', v); o.value = v; sel.append(o); }
+  const note = el('input'); note.placeholder = 'Note (optional)'; note.style.flex = '1';
+  const fix = el('button', 'Correct verdict');
+  const send = async (body) => { await api('/reviews/' + id, {method: 'POST', body: JSON.stringify(body)}); box.replaceChildren(); load(); };
+  ok.onclick = () => send({action: 'approve', note: note.value});
+  fix.onclick = () => send({action: 'correct', verdict: sel.value, note: note.value});
+  row.append(ok, sel, fix, note); c.append(row); box.append(c);
+}
+$('go').onclick = load; $('hours').onchange = () => $('dash').hidden || load();
+$('token').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+</script>
+</body>
+</html>

@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     # Tools
     google_api_key: SecretStr | None = None  # Fact Check Tools, Vision, Safe Browsing, Speech-to-Text
     brave_api_key: SecretStr | None = None
-    factcheck_feeds: str = ""  # comma separated RSS/Atom URLs of fact-checkers to index
     fetch_timeout_s: float = 8.0
     fetch_max_bytes: int = 3_000_000
     fetch_max_redirects: int = 5
@@ -83,6 +82,7 @@ class Settings(BaseSettings):
     # Observability
     otel_exporter_otlp_endpoint: str = ""
     worker_concurrency: int = Field(default=4, ge=1)
+    db_pool_size: int = Field(default=10, ge=2)
 
     def prices(self) -> dict[str, tuple[float, float]]:
         out: dict[str, tuple[float, float]] = {}

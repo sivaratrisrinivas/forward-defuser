@@ -90,7 +90,20 @@ class BaselinePolicyLLM:
             return self._triage(kw)
         if purpose == "investigate":
             return self._investigate(kw)
+        if purpose == "same_claim":
+            return self._same_claim(kw)
         return self._compose(kw)
+
+    # ---------------- same_claim: conservative word-set match, numbers must agree exactly
+    def _same_claim(self, kw) -> LLMResponse:
+        parts = re.findall(r"<untrusted_\w+[^>]*>\n(.*?)\n</untrusted_", kw["messages"][0]["content"], re.S)
+        if len(parts) != 2:
+            return text_response({"same_claim": False})
+        a, b = (_words(p) for p in parts)
+        nums = [set(re.findall(r"\d+", p)) for p in parts]
+        neg = [bool(CLAIM_NEG_RE.search(p)) for p in parts]
+        jacc = len(a & b) / max(1, len(a | b))
+        return text_response({"same_claim": jacc >= 0.8 and nums[0] == nums[1] and neg[0] == neg[1]})
 
     # ---------------- triage
     def _triage(self, kw) -> LLMResponse:

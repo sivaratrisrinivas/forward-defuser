@@ -13,7 +13,17 @@ log = logging.getLogger(__name__)
 async def process_inbound(payload: dict, job: Job) -> None:
     from defuser.pipeline import process_inbound_message
 
-    await process_inbound_message(await get_pool(), payload["inbound_id"])
+    pool = await get_pool()
+    try:
+        await process_inbound_message(pool, payload["inbound_id"])
+    except Exception:
+        if job.attempts < job.max_attempts:
+            raise  # retried with backoff; the journal and outbox make the retry cheap and duplicate-free
+        # Last attempt: the person still gets an answer ("something went wrong, try later") instead of silence.
+        from defuser.pipeline import send_error_reply
+
+        log.exception("inbound %s failed on its last attempt", payload["inbound_id"])
+        await send_error_reply(pool, payload["inbound_id"])
 
 
 @handler("recheck_claim")

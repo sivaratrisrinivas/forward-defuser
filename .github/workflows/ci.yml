@@ -29,9 +29,15 @@ jobs:
       - run: uv run pytest -q
       # Offline eval: frozen evidence + replayed/stub model. Fails on any gate regression (see evals/README.md).
       - run: uv run defuser-eval --mode offline --gate evals/baseline.json --out eval-report.json
+      # Short load test with simulated model errors and webhook redeliveries: every message answered exactly once.
+      - run: |
+          PGPASSWORD=fd psql -h localhost -U fd -d fd_test -c "CREATE DATABASE fd_load"
+          DATABASE_URL=postgresql://fd:fd@localhost:5432/fd_load REDIS_URL=redis://localhost:6379/14 \
+            uv run python scripts/loadtest.py --messages 150 --rps 30 --llm-delay 0.1 --llm-error-rate 0.05 \
+            --check --out loadtest-report.json
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: eval-report, path: eval-report.json }
+        with: { name: eval-report, path: "eval-report.json\nloadtest-report.json" }
 
   eval-live:
     # Real Claude on frozen evidence. Runs only when the repo has an ANTHROPIC_API_KEY secret.

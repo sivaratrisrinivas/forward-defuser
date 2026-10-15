@@ -15,7 +15,7 @@ import asyncpg
 
 from defuser.channels.registry import get_channel
 from defuser.models import ChatRef
-from defuser.privacy import decrypt_json, encrypt_json
+from defuser.privacy import decrypt_json, encrypt_json, hash_id
 
 log = logging.getLogger(__name__)
 
@@ -23,12 +23,13 @@ log = logging.getLogger(__name__)
 async def send_once(pool: asyncpg.Pool, key: str, chat: ChatRef, text: str) -> str | None:
     """Send `text` to `chat` exactly once per `key`. Returns the provider message id (None if already sent)."""
     await pool.execute(
-        """INSERT INTO outbox (idempotency_key, channel, chat_ref_enc, body)
-           VALUES ($1, $2, $3, $4) ON CONFLICT (idempotency_key) DO NOTHING""",
+        """INSERT INTO outbox (idempotency_key, channel, chat_ref_enc, body, chat_hash)
+           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (idempotency_key) DO NOTHING""",
         key,
         chat.channel,
         encrypt_json(chat.model_dump()),
         {"text": text},
+        hash_id(chat.channel, chat.chat_id),
     )
     row = await pool.fetchrow(
         "UPDATE outbox SET status = 'sending', attempts = attempts + 1 WHERE idempotency_key = $1 AND status <> 'sent' "

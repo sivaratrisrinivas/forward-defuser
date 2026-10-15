@@ -14,7 +14,12 @@ async def forget_user(pool: asyncpg.Pool, channel: str, user_id: str) -> dict:
             user_hash,
         )
         await conn.execute("DELETE FROM users WHERE user_hash = $1", user_hash)
-    return {"claim_asks": asks, "inbound": inbound}
+        # In a private chat the chat id is the user id, so this removes the record of replies sent to them
+        # (kept for idempotency); the forget confirmation itself is sent after this and expires with retention.
+        outbox = await conn.execute(
+            "DELETE FROM outbox WHERE chat_hash = $1 AND status = 'sent'", hash_id(channel, user_id)
+        )
+    return {"claim_asks": asks, "inbound": inbound, "outbox": outbox}
 
 
 async def apply_retention(pool: asyncpg.Pool, days: int) -> dict:

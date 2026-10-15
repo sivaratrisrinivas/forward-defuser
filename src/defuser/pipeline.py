@@ -6,7 +6,7 @@ import uuid
 
 import asyncpg
 
-from defuser import budget
+from defuser import budget, singleflight
 from defuser.agent.backends import default_backends
 from defuser.cache import ClaimCache
 from defuser.channels.base import IncomingEvent
@@ -23,6 +23,7 @@ from defuser.outbox import send_once
 from defuser.privacy import decrypt_json, hash_id
 from defuser.render import render_simple
 from defuser.runs import finish_run, start_run
+from defuser.singleflight import flight_key
 
 log = logging.getLogger(__name__)
 RUN_NS = uuid.UUID("6f1c1d2e-8a51-4f0a-9d0e-5b7b8f6c2a10")
@@ -111,6 +112,29 @@ async def process_inbound_message(pool: asyncpg.Pool, inbound_id: int) -> None:
 
     res = None
     hit = await cache.by_fingerprint(msg)
+    sf_key = flight_key(msg) if hit is None else None
+    token = await singleflight.acquire(sf_key) if sf_key else None
+    if sf_key and token is None:
+        # Someone is already checking this exact forward: wait for their answer instead of paying twice.
+        hit = await singleflight.wait_for(sf_key, lambda: cache.by_fingerprint(msg))
+        if hit is None:
+            token = await singleflight.acquire(sf_key)
+    try:
+        res = await _check_and_record(checker, cache, msg, hit, run_id, allowance)
+    finally:
+        await singleflight.release(sf_key, token)
+    await finish_run(pool, res, cache_hit=res.cache_hit, claim_id=res.claim_id)
+    await budget.record_spend(user_hash, res.meter.cost if res.meter else 0.0)
+    await send_once(pool, f"reply:{inbound_id}", chat, res.reply)
+    await after_reply(pool, res, msg, chat, inbound_id)
+    CHECKS.labels(res.verdict.value, res.cache_hit, ev.channel).inc()
+    CHECK_LATENCY.observe(res.latency_ms / 1000)
+    CHECK_COST.observe(res.meter.cost if res.meter else 0)
+    await _mark_done(pool, inbound_id)
+
+
+async def _check_and_record(checker, cache, msg, hit, run_id, allowance):
+    res = None
     if hit is not None:
         res = await checker.from_cache(hit, msg, hit.lang or msg.lang, run_id)
     if res is None:
@@ -135,14 +159,7 @@ async def process_inbound_message(pool: asyncpg.Pool, inbound_id: int) -> None:
             claim_id=res.claim_id,
         )
         res.claim_id = claim_id
-    await finish_run(pool, res, cache_hit=res.cache_hit, claim_id=claim_id)
-    await budget.record_spend(user_hash, res.meter.cost if res.meter else 0.0)
-    await send_once(pool, f"reply:{inbound_id}", chat, res.reply)
-    await after_reply(pool, res, msg, chat, inbound_id)
-    CHECKS.labels(res.verdict.value, res.cache_hit, ev.channel).inc()
-    CHECK_LATENCY.observe(res.latency_ms / 1000)
-    CHECK_COST.observe(res.meter.cost if res.meter else 0)
-    await _mark_done(pool, inbound_id)
+    return res
 
 
 async def after_reply(pool, res, msg, chat, inbound_id) -> None:
@@ -159,6 +176,20 @@ async def after_reply(pool, res, msg, chat, inbound_id) -> None:
         await followup.maybe_alert_viral(pool, res.claim_id)
     except Exception:  # noqa: BLE001
         log.exception("after_reply failed for inbound %s", inbound_id)
+
+
+async def send_error_reply(pool: asyncpg.Pool, inbound_id: int) -> None:
+    row = await pool.fetchrow("SELECT payload_enc FROM inbound_messages WHERE id = $1", inbound_id)
+    if row is None or row["payload_enc"] is None:
+        return
+    data = decrypt_json(row["payload_enc"])
+    ev, chat = IncomingEvent(**data["event"]), ChatRef(**data["chat"])
+    await send_once(
+        pool, f"reply:{inbound_id}", chat, render_simple(resolve(guess_lang(ev.text, ev.lang_hint)), "error")
+    )
+    await pool.execute(
+        "UPDATE inbound_messages SET status = 'failed', payload_enc = NULL WHERE id = $1", inbound_id
+    )
 
 
 async def _mark_done(pool: asyncpg.Pool, inbound_id: int) -> None:

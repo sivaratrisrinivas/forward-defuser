@@ -114,5 +114,5 @@ async def same_claim(llm: LLMProvider, journal: Journal, meter: Meter, claim: st
             effort="low",
         )
         return bool(json.loads(resp.text()).get("same_claim"))
-    except (LLMError, ValueError, KeyError, TypeError):
-        return False
+    except (LLMError, ValueError, KeyError, TypeError, AttributeError):
+        return False  # any doubt means: not the same claim, investigate

@@ -149,6 +149,48 @@ A Fly.io config is in `deploy/fly/fly.toml`.
   sandbox). They were cross-checked against the open-source `pywa` client and are listed in
   `src/defuser/channels/whatsapp.py`; the Graph API version is configurable (`WHATSAPP_GRAPH_VERSION`).
 
+### M6 — hardening: chaos tests, review queue, dashboard, runbook, load test
+
+- Chaos tests (`tests/test_m6_chaos.py`): out-of-order and redelivered webhooks, five identical forwards at once,
+  model outage, garbage model output, every outside API down, a 240 KB message, emoji-only messages, a satire page
+  passed off as a refutation, a jailbreak forward, Postgres down at the webhook (non-2xx so Telegram retries),
+  Redis down at the webhook, malformed updates, an unexpected bug on the last attempt, and `DATA_KEY` rotation.
+- Single-flight for viral forwards: when the same forward arrives several times at once, one job investigates and
+  the rest wait for its cached answer (Redis lock; skipped if Redis is down).
+- Review queue and dashboard at `/admin` (bearer token; the page holds no data until the token is entered):
+  checks, p50/p95 latency, cost per check, total cost, cache hit rate, verifier pass rate, verdict mix, hourly chart,
+  queue depth and dead jobs. Reviewers approve or correct downgraded answers. A correction takes the cached verdict
+  out of service and becomes an eval case (`scripts/export_corrections.py`).
+- `RUNBOOK.md` covers incidents (no replies, slow replies, model outage, cost spike, dead jobs, wrong verdict,
+  delete-my-data, Redis down, WhatsApp window) and routine tasks (key rotation, model change, new language).
+- Load test (`scripts/loadtest.py`, also a CI gate at 150 messages): results below.
+- **What broke:** (1) The load test's first run left 40 of 200 messages unanswered: the eval stand-in model had no
+  answer for the claim-sameness question, the resulting error escaped the sameness check, and five retries later the
+  job was dead with nobody told. Now the sameness check treats any error as "not the same claim", and a job that
+  fails on its last attempt sends "something went wrong, please try again" instead of silence. (2) The Hinglish
+  detector counted English words ("to", "forward", "share", "main") as Hindi markers, so a long English chain
+  message was answered in Hinglish. Those words are gone and two distinct markers are now required. (3) A JSON
+  array posted to the Telegram webhook raised a 500, so Telegram would redeliver it forever; non-object bodies and
+  malformed updates are now acknowledged and dropped. (4) `/forget` left the record of replies sent to that person
+  in the outbox; outbox rows now carry a chat hash and are deleted too.
+
+## Load test
+
+`scripts/loadtest.py --messages 600 --rps 40 --workers 3 --concurrency 8 --llm-delay 0.3 --llm-error-rate 0.05`
+on one machine with local Postgres and Redis. The model is simulated (0.15 to 0.45 s per call, 5% of calls fail
+with an overloaded error) and the outside world is frozen, so this measures the system around the model.
+
+| Measure | Result |
+|---|---|
+| Messages answered | 600 of 600, no duplicate replies (5% of webhooks redelivered) |
+| Webhook acknowledgement | p50 4.9 ms, p95 9.6 ms, p99 24 ms |
+| Throughput | 20.5 messages/s with 24 concurrent check slots |
+| Viral duplicates (40% of traffic) | 226 answered from cache with no model calls |
+| End to end | p50 6.3 s, p95 12.3 s, mostly queueing: 40 msg/s offered against about 20 msg/s capacity |
+
+With the real model a check takes 10 to 25 s, so capacity is roughly `instances × WORKER_CONCURRENCY / 15` checks
+per second; the webhook side is never the bottleneck.
+
 ## Eval results
 
 Offline mode (frozen evidence, deterministic baseline policy instead of Claude; latency and cost are from stub
@@ -162,3 +204,52 @@ token counts, not real). Live-model numbers need an `ANTHROPIC_API_KEY` and run 
 
 The baseline mostly misses non-English variants (it matches words in English only), which is exactly what the
 model's `canonical_en` claim fixes; its misses are abstentions, not wrong debunks.
+
+Debunk precision (share of FALSE/SCAM answers that were right) is 1.0 on both sets. Cross-language consistency is
+0.51 for the baseline because it only understands English; the claim cache, not the model, is what makes the same
+rumour get the same answer in every language in production.
+
+## Definition of done: status
+
+| Item | Status |
+|---|---|
+| Deployed | Not yet: needs a cloud account, bot token and API keys (see "What you need to provide") |
+| 100% citation validity | Yes in every eval mode, including a fully hijacked model |
+| Survives the chaos list | Yes: `tests/test_m6_chaos.py` and the load test |
+| Cost and latency dashboard | `/admin` (plus Prometheus metrics) |
+| README and runbook | This file and `RUNBOOK.md` |
+| Live-model eval | Runs in CI once `ANTHROPIC_API_KEY` is set as a repository secret; no numbers yet |
+
+## What you need to provide
+
+1. A Telegram bot token from @BotFather, and the bot's username.
+2. An Anthropic API key.
+3. A Google Cloud project with billing (Cloud Run, Cloud SQL Postgres 16, Memorystore Redis, Secret Manager,
+   Artifact Registry), or a Fly.io account (`deploy/fly/fly.toml`).
+4. A Google API key with the Fact Check Tools API enabled (and Vision and Speech-to-Text for photos and voice notes).
+5. Optional: a Brave Search API key, a Safe Browsing or Web Risk key, a WhatsApp Cloud API app (access token, app
+   secret, verify token, phone number id), and a Telegram chat id for admin alerts.
+
+## Known limitations
+
+- **Unverified API behaviour.** These docs were unreachable from the build sandbox, so the request and response
+  shapes are written from memory or cross-checked against open-source clients, and are isolated behind small
+  adapters: Brave Search, Google Safe Browsing v4, RDAP, Vision `images:annotate`, Speech `v1p1beta1`, the Telegram
+  getFile size limit and file URL, and the whole WhatsApp Cloud API. The Fact Check Tools API was verified.
+- **Safe Browsing licence.** The Safe Browsing API is for non-commercial use; a commercial deployment should switch
+  `check_url_safety` to Google Web Risk.
+- **SSRF and DNS rebinding.** The fetcher resolves a host, rejects private and reserved addresses, then connects.
+  A hostile DNS server could answer differently between the check and the connect. Run the worker with egress
+  rules that block private ranges (Cloud Run `--vpc-egress private-ranges-only` routes them into the VPC, where a
+  firewall rule should deny them).
+- **Unreviewed translations.** Hindi, Hinglish, Tamil, Telugu, Bengali and Marathi templates were written by the
+  build and need a native speaker before launch.
+- **WhatsApp follow-ups after 24 hours** need an approved message template, which is not built. WhatsApp group
+  checks need the text after `/check`, because the webhook does not include the replied-to message.
+- **Marathi vs Hindi** share a script; telling them apart relies on the model's language field.
+- **Embeddings** are a local feature-hashing embedder (no API dependency). It is good enough to find candidates
+  for the cheap-model sameness check, not to judge sameness alone.
+- **Offline eval numbers** measure the plumbing with a rule-based stand-in model, not Claude. Live-model numbers
+  appear once the API key is set in CI.
+- **Images in the cache** match by perceptual hash; a heavily cropped or edited copy of a known image is checked
+  again from scratch.

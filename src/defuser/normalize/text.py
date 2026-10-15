@@ -16,7 +16,8 @@ SCRIPTS = {
     "te": (0x0C00, 0x0C7F),
 }
 
-# Small romanized-Hindi marker list for Hinglish detection. Function words, not content words.
+# Small romanized-Hindi marker list for Hinglish detection. Function words, not content words, and never words that
+# are also English ("to", "main", "share", "forward" appear in every English chain message).
 HINGLISH_MARKERS = {
     "hai",
     "hain",
@@ -32,10 +33,8 @@ HINGLISH_MARKERS = {
     "ko",
     "se",
     "mein",
-    "main",
     "bhi",
     "toh",
-    "to",
     "kar",
     "karo",
     "karein",
@@ -67,10 +66,7 @@ HINGLISH_MARKERS = {
     "gayi",
     "diya",
     "liye",
-    "lie",
     "batao",
-    "share",
-    "forward",
 }
 
 
@@ -115,7 +111,7 @@ def guess_lang(text: str, hint: str | None = None) -> str:
         return lang
     words = re.findall(r"[a-z]+", text.lower())
     if words:
-        markers = sum(1 for w in words if w in HINGLISH_MARKERS)
-        if markers >= 2 and markers / len(words) >= 0.12:
+        hits = [w for w in words if w in HINGLISH_MARKERS]
+        if len(set(hits)) >= 2 and len(hits) / len(words) >= 0.12:
             return "hinglish"
     return "en"

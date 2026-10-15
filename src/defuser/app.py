@@ -68,7 +68,13 @@ def create_app() -> FastAPI:
         except ValueError:
             WEBHOOKS.labels("telegram", "bad_json").inc()
             return JSONResponse({"ok": True})  # never make Telegram retry garbage
-        ev = telegram.parse_update(update, s.telegram_bot_username)
+        if not isinstance(update, dict):
+            WEBHOOKS.labels("telegram", "bad_json").inc()
+            return JSONResponse({"ok": True})
+        try:
+            ev = telegram.parse_update(update, s.telegram_bot_username)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            ev = None  # malformed update: acknowledge so Telegram doesn't redeliver it forever
         if ev is None:
             WEBHOOKS.labels("telegram", "ignored").inc()
             return JSONResponse({"ok": True})
@@ -109,7 +115,7 @@ def create_app() -> FastAPI:
         except ValueError:
             WEBHOOKS.labels("whatsapp", "bad_json").inc()
             return JSONResponse({"ok": True})
-        events = whatsapp.parse_webhook(payload)
+        events = whatsapp.parse_webhook(payload) if isinstance(payload, dict) else []
         if not events:
             WEBHOOKS.labels("whatsapp", "ignored").inc()  # status callbacks, group chatter, unsupported types
         for ev in events:

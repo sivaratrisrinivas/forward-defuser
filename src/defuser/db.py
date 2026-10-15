@@ -22,7 +22,10 @@ async def get_pool(dsn: str | None = None) -> asyncpg.Pool:
     global _pool
     if _pool is None:
         _pool = await asyncpg.create_pool(
-            dsn or get_settings().database_url, min_size=1, max_size=10, init=_init_conn
+            dsn or get_settings().database_url,
+            min_size=1,
+            max_size=get_settings().db_pool_size,
+            init=_init_conn,
         )
     return _pool
 
