@@ -28,7 +28,11 @@ def _fix_keys(obj):
 
 
 def supported() -> list[str]:
-    return [c.strip() for c in os.environ.get("SUPPORTED_LANGS", "en,hi,hinglish").split(",") if c.strip()]
+    return [
+        c.strip()
+        for c in os.environ.get("SUPPORTED_LANGS", "en,hi,hinglish,ta,te,bn,mr").split(",")
+        if c.strip()
+    ]
 
 
 def resolve(code: str | None) -> str:

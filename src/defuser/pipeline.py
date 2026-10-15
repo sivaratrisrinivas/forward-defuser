@@ -55,7 +55,8 @@ async def handle_command(
 ) -> None:
     key = f"reply:{inbound_id}"
     if ev.command in ("start", "help"):
-        await send_once(pool, key, chat, render_simple(lang, ev.command))
+        which = "help_wa_group" if ev.channel == "whatsapp" and ev.is_group else ev.command
+        await send_once(pool, key, chat, render_simple(lang, which))
     elif ev.command == "forget":
         from defuser.privacy_ops import forget_user
 
@@ -84,7 +85,7 @@ async def process_inbound_message(pool: asyncpg.Pool, inbound_id: int) -> None:
         return
 
     channel = get_channel(ev.channel)
-    await channel.typing(chat.chat_id)
+    await channel.typing(chat.chat_id, ev.message_id)
 
     media_bytes = None
     processor = _deps.get("media_processor")

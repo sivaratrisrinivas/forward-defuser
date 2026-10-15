@@ -32,3 +32,4 @@ start: "Namaste! 🙏 Forward me any message you're unsure about, and I'll tell 
 forget_done: "Done. I've deleted what I had stored about you."
 update: "📢 Update on a message you asked me about earlier:"
 error: "😅 Something went wrong on my side. Please try again in a little while."
+help_wa_group: "In WhatsApp groups I can't see the message you replied to. Send /check followed by the text, or forward the message to me directly."

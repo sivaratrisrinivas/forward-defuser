@@ -128,6 +128,27 @@ A Fly.io config is in `deploy/fly/fly.toml`.
   claim's ask count and could trip the viral alert on its own; re-checks now take that count back. The first
   design also stored a chat pointer for every ask, which is more personal data than a verified answer needs.
 
+### M5 — WhatsApp and more languages
+
+- WhatsApp Cloud API channel: `GET /webhooks/whatsapp` answers Meta's verification handshake
+  (`WHATSAPP_VERIFY_TOKEN`), `POST /webhooks/whatsapp` checks `X-Hub-Signature-256` (HMAC-SHA256 of the raw body
+  with `WHATSAPP_APP_SECRET`) before parsing, then goes through the same rate limit, dedupe and queue as Telegram.
+  Forwarded and "forwarded many times" flags come from `context`. Images and voice notes are downloaded through the
+  media endpoint. Point the Meta app's webhook at `<PUBLIC_BASE_URL>/webhooks/whatsapp` and subscribe to `messages`.
+- WhatsApp is 1:1 first ("forward it to the bot's number"). In groups (only business-created groups, a limited
+  API) the bot acts on `/check <text>` only; a bare reply with `/check` gets an explanation, because the webhook
+  carries only the replied message's id, not its content.
+- Languages: templates for Tamil, Telugu, Bengali and Marathi added next to English, Hindi and Hinglish
+  (`SUPPORTED_LANGS`). All non-English templates are unreviewed drafts (`reviewed: false`) and need a native
+  speaker before launch. The scam helpline (1930, cybercrime.gov.in) is checked to be present in every language.
+- **What broke:** follow-ups at 24 and 72 hours collide with WhatsApp's 24-hour customer-service window: a
+  free-form message outside it fails with error 131047, and the job retried until it was dead-lettered. That error
+  is now non-retryable: the person is marked as handled and the other subscribers still get their update. Sending
+  late updates on WhatsApp needs an approved message template, which is not built.
+- **Not verified here:** every WhatsApp Cloud API shape (developers.facebook.com was unreachable from the build
+  sandbox). They were cross-checked against the open-source `pywa` client and are listed in
+  `src/defuser/channels/whatsapp.py`; the Graph API version is configurable (`WHATSAPP_GRAPH_VERSION`).
+
 ## Eval results
 
 Offline mode (frozen evidence, deterministic baseline policy instead of Claude; latency and cost are from stub

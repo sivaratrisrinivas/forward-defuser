@@ -32,3 +32,4 @@ start: "Namaste! 🙏 Jis message pe shak ho, mujhe forward kijiye. Main source 
 forget_done: "Ho gaya. Aapke baare mein jo bhi data tha, maine delete kar diya."
 update: "📢 Aapne pehle jis message ke baare mein poocha tha, uspe update:"
 error: "😅 Meri taraf se kuch gadbad ho gayi. Thodi der baad try kijiye."
+help_wa_group: "WhatsApp group mein main woh message nahi dekh pata jispe aapne reply kiya. /check ke baad message ka text likhiye, ya woh message seedha mujhe forward kijiye."

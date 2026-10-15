@@ -168,13 +168,19 @@ async def notify_subscribers(pool: asyncpg.Pool, claim_id: int, checker) -> int:
                 return sent
             rendered[lang] = t(lang, "update") + "\n\n" + res.reply
         chat = ChatRef(**decrypt_json(a["chat_ref_enc"]))
-        await send_once(
-            pool, f"followup:{claim_id}:{a['user_hash']}:{hit.verdict.value}", chat, rendered[lang]
-        )
+        try:
+            await send_once(
+                pool, f"followup:{claim_id}:{a['user_hash']}:{hit.verdict.value}", chat, rendered[lang]
+            )
+            sent += 1
+        except Exception as e:
+            if getattr(e, "retryable", True):
+                raise
+            # e.g. WhatsApp's 24-hour window has closed: this person can't be messaged, so don't retry forever.
+            log.warning("follow-up to ask %s not deliverable: %s", a["id"], e)
         await pool.execute(
             "UPDATE claim_asks SET verdict_sent = $2 WHERE id = $1", a["id"], hit.verdict.value
         )
-        sent += 1
     return sent
 
 

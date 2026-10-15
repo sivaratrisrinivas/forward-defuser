@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from defuser.budget import check_rate
-from defuser.channels import telegram
+from defuser.channels import telegram, whatsapp
 from defuser.config import get_settings
 from defuser.db import close_pool, get_pool
 from defuser.ingest import ingest_event
@@ -72,14 +72,48 @@ def create_app() -> FastAPI:
         if ev is None:
             WEBHOOKS.labels("telegram", "ignored").inc()
             return JSONResponse({"ok": True})
+        await _admit(ev, "telegram")
+        return JSONResponse({"ok": True})
+
+    async def _admit(ev, channel_name: str) -> None:
         allowance = await check_rate(hash_id(ev.channel, ev.user_id))
         if not allowance.ok:
             if not allowance.notify:
-                WEBHOOKS.labels("telegram", "rate_limited").inc()
-                return JSONResponse({"ok": True})
+                WEBHOOKS.labels(channel_name, "rate_limited").inc()
+                return
             ev = ev.model_copy(update={"command": "rate_limited", "text": "", "media": None})
         inbound_id = await ingest_event(await get_pool(), ev)
-        WEBHOOKS.labels("telegram", "queued" if inbound_id else "duplicate").inc()
+        WEBHOOKS.labels(channel_name, "queued" if inbound_id else "duplicate").inc()
+
+    @app.get("/webhooks/whatsapp")
+    async def whatsapp_verify(request: Request):
+        s = get_settings()
+        token = s.whatsapp_verify_token.get_secret_value() if s.whatsapp_verify_token else None
+        challenge = whatsapp.verify_handshake(dict(request.query_params), token)
+        if challenge is None:
+            return PlainTextResponse("forbidden", status_code=403)
+        return PlainTextResponse(challenge)
+
+    @app.post("/webhooks/whatsapp")
+    async def whatsapp_webhook(request: Request):
+        s = get_settings()
+        raw = await request.body()
+        secret = s.whatsapp_app_secret.get_secret_value() if s.whatsapp_app_secret else None
+        if not whatsapp.verify_signature(raw, request.headers.get("X-Hub-Signature-256"), secret):
+            WEBHOOKS.labels("whatsapp", "bad_signature").inc()
+            return PlainTextResponse("forbidden", status_code=403)
+        try:
+            import json
+
+            payload = json.loads(raw)
+        except ValueError:
+            WEBHOOKS.labels("whatsapp", "bad_json").inc()
+            return JSONResponse({"ok": True})
+        events = whatsapp.parse_webhook(payload)
+        if not events:
+            WEBHOOKS.labels("whatsapp", "ignored").inc()  # status callbacks, group chatter, unsupported types
+        for ev in events:
+            await _admit(ev, "whatsapp")
         return JSONResponse({"ok": True})
 
     from defuser.admin.routes import router as admin_router

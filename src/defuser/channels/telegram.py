@@ -154,7 +154,7 @@ class TelegramChannel:
         res = await self._call("sendMessage", payload)
         return str(res["message_id"])
 
-    async def typing(self, chat_id: str) -> None:
+    async def typing(self, chat_id: str, message_id: str | None = None) -> None:
         try:
             await self._call("sendChatAction", {"chat_id": chat_id, "action": "typing"})
         except Exception:  # noqa: BLE001 - cosmetic

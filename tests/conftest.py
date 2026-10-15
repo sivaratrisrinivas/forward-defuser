@@ -33,7 +33,7 @@ class FakeChannel:
         self.sent.append((chat_id, text, reply_to))
         return str(len(self.sent))
 
-    async def typing(self, chat_id):
+    async def typing(self, chat_id, message_id=None):
         return None
 
     async def download(self, media):
