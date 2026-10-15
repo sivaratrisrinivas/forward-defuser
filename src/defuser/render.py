@@ -36,7 +36,10 @@ def render_reply(
     lines.append(t(lang, "next_step", v))
     if truncated:
         lines.append(t(lang, "too_long"))
-    return "\n".join(lines).strip()
+    out = "\n".join(lines).strip()
+    while "\n\n\n" in out:  # no reasons: don't leave a double gap
+        out = out.replace("\n\n\n", "\n\n")
+    return out
 
 
 def render_simple(lang: str, key: str) -> str:
