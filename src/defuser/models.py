@@ -119,6 +119,7 @@ class Evidence(BaseModel):
     title: str | None = None
     publisher: str | None = None
     tier: Tier = Tier.OTHER
+    kind: str = "page"  # page | factcheck_record | safety_record | image_match
     label: Label | None = None
     text: str
 
