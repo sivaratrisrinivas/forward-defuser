@@ -1,0 +1,62 @@
+[project]
+name = "forward-defuser"
+version = "0.1.0"
+description = "Fact-checks forwarded messages and replies in the sender's language with a verdict, reasons and sources."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "asyncpg>=0.29",
+    "redis>=5.0",
+    "httpx>=0.27",
+    "anthropic>=0.60",
+    "pillow>=10.4",
+    "imagehash>=4.3",
+    "numpy>=1.26",
+    "trafilatura>=1.12",
+    "cryptography>=43",
+    "prometheus-client>=0.20",
+    "opentelemetry-api>=1.26",
+    "opentelemetry-sdk>=1.26",
+    "opentelemetry-exporter-otlp-proto-http>=1.26",
+    "boto3>=1.34",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+defuser-worker = "defuser.jobs.worker:main"
+defuser-migrate = "defuser.db:migrate_main"
+defuser-eval = "defuser.evals.runner:main"
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "defuser"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+ignore = ["E501", "B008"]
