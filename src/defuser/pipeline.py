@@ -6,7 +6,9 @@ import uuid
 
 import asyncpg
 
+from defuser import budget
 from defuser.agent.backends import default_backends
+from defuser.cache import ClaimCache
 from defuser.channels.base import IncomingEvent
 from defuser.channels.registry import get_channel
 from defuser.checker import Checker
@@ -18,7 +20,7 @@ from defuser.normalize.message import normalize_event
 from defuser.normalize.text import guess_lang
 from defuser.observability import CHECK_COST, CHECK_LATENCY, CHECKS
 from defuser.outbox import send_once
-from defuser.privacy import decrypt_json
+from defuser.privacy import decrypt_json, hash_id
 from defuser.render import render_simple
 from defuser.runs import finish_run, start_run
 
@@ -59,6 +61,8 @@ async def handle_command(
 
         await forget_user(pool, ev.channel, ev.user_id)
         await send_once(pool, key, chat, render_simple(lang, "forget_done"))
+    elif ev.command == "rate_limited":
+        await send_once(pool, key, chat, render_simple(lang, "rate_limited"))
     elif ev.command == "lang":
         await send_once(pool, key, chat, render_simple(lang, "help"))
 
@@ -90,18 +94,59 @@ async def process_inbound_message(pool: asyncpg.Pool, inbound_id: int) -> None:
         processor = processor or MediaProcessor.default()
         media_bytes = await download_media(channel, ev.media)
 
+    user_hash = hash_id(ev.channel, ev.user_id)
+    allowance = await budget.reserve(pool, user_hash)
+    if not allowance.ok:
+        await send_once(pool, f"reply:{inbound_id}", chat, render_simple(lang_guess, "busy"))
+        await _mark_done(pool, inbound_id)
+        return
+
     fetcher = _deps.get("fetcher") or Fetcher()
     msg = await normalize_event(ev, chat, fetcher, media_bytes, processor)
     run_id = run_id_for(inbound_id)
     await start_run(pool, run_id, inbound_id, "check")
     checker = make_checker(pool)
-    res = await checker.check(msg, run_id=run_id)
-    await finish_run(pool, res)
+    cache = ClaimCache(pool)
+
+    res = None
+    hit = await cache.by_fingerprint(msg)
+    if hit is not None:
+        res = await checker.from_cache(hit, msg, hit.lang or msg.lang, run_id)
+    if res is None:
+        res = await checker.check(msg, run_id=run_id, max_cost=allowance.max_cost, cache=cache)
+
+    claim_id = res.claim_id
+    if res.kind == "checked" and res.triage and res.triage.claims or res.cache_hit != "none":
+        canonical = (
+            res.triage.claims[0].canonical_en
+            if res.triage and res.triage.claims
+            else msg.combined_text()[:500]
+        )
+        claim_type = res.triage.claim_type.value if res.triage else "other"
+        claim_id = await cache.record(
+            canonical,
+            claim_type,
+            msg,
+            res.verdict,
+            res.confidence,
+            run_id,
+            update_verdict=res.cache_hit == "none",
+            claim_id=res.claim_id,
+        )
+        res.claim_id = claim_id
+    await finish_run(pool, res, cache_hit=res.cache_hit, claim_id=claim_id)
+    await budget.record_spend(user_hash, res.meter.cost if res.meter else 0.0)
     await send_once(pool, f"reply:{inbound_id}", chat, res.reply)
-    CHECKS.labels(res.verdict.value, "none", ev.channel).inc()
+    await after_reply(pool, res, msg, chat, inbound_id)
+    CHECKS.labels(res.verdict.value, res.cache_hit, ev.channel).inc()
     CHECK_LATENCY.observe(res.latency_ms / 1000)
     CHECK_COST.observe(res.meter.cost if res.meter else 0)
     await _mark_done(pool, inbound_id)
+
+
+async def after_reply(pool, res, msg, chat, inbound_id) -> None:
+    """Follow-ups, clustering alerts (M4)."""
+    return None
 
 
 async def _mark_done(pool: asyncpg.Pool, inbound_id: int) -> None:

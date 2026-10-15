@@ -8,11 +8,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from defuser.budget import check_rate
 from defuser.channels import telegram
 from defuser.config import get_settings
 from defuser.db import close_pool, get_pool
 from defuser.ingest import ingest_event
 from defuser.observability import WEBHOOKS, setup_logging, setup_tracing
+from defuser.privacy import hash_id
 
 log = logging.getLogger("defuser.app")
 
@@ -70,6 +72,12 @@ def create_app() -> FastAPI:
         if ev is None:
             WEBHOOKS.labels("telegram", "ignored").inc()
             return JSONResponse({"ok": True})
+        allowance = await check_rate(hash_id(ev.channel, ev.user_id))
+        if not allowance.ok:
+            if not allowance.notify:
+                WEBHOOKS.labels("telegram", "rate_limited").inc()
+                return JSONResponse({"ok": True})
+            ev = ev.model_copy(update={"command": "rate_limited", "text": "", "media": None})
         inbound_id = await ingest_event(await get_pool(), ev)
         WEBHOOKS.labels("telegram", "queued" if inbound_id else "duplicate").inc()
         return JSONResponse({"ok": True})

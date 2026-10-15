@@ -63,8 +63,7 @@ class Settings(BaseSettings):
     max_cost_global_day_usd: float = 50.0
 
     # Cache and clustering
-    claim_cache_similarity: float = 0.90
-    claim_cluster_similarity: float = 0.82
+    claim_cache_similarity: float = 0.75  # candidate threshold; the cheap model confirms sameness
     cache_fresh_hours_verified: int = 24 * 30
     cache_fresh_hours_unverified: int = 6
     image_phash_max_distance: int = 6

@@ -92,6 +92,26 @@ A Fly.io config is in `deploy/fly/fly.toml`.
   (Google docs were unreachable from the build sandbox); both are isolated in `media.py` and failures degrade to a
   text-only check.
 
+### M3 — near-duplicate cache and cost controls
+
+- Pre-triage cache: sha256 of normalised text, and image pHash within Hamming distance 6 (`bit_count` on
+  `phash # x`), answer with zero model calls.
+- Post-triage cache: the canonical English claim is embedded (local feature-hashing embedder, pgvector HNSW
+  cosine index). A near match (≥ 0.75) is confirmed by the cheap model ("same checkable fact? different numbers,
+  places, dates or a negation mean no") before its verdict is reused. A same-claim hit in another language
+  re-runs only the composer (verified as usual), so the same rumour in five languages costs one investigation.
+- Freshness: verified verdicts are reused for 30 days, UNVERIFIED for 6 hours; stale hits are re-investigated
+  and the claim's verdict is updated. An UNVERIFIED result never overwrites a fresh verified one.
+- Budgets: per-user per-minute rate limit at the webhook (one "slow down" notice, the rest dropped before
+  storage), per-user daily messages and spend, global daily spend, per-message step and cost caps. Over budget
+  gives a friendly "try again later". If Redis is down, daily spend falls back to summing today's runs in
+  Postgres, so an outage never means unlimited spend.
+- **What broke:** the first similarity thresholds (0.90 to reuse) almost never matched real paraphrases
+  ("RBI is banning all 10 rupee coins" vs "RBI will ban 10 rupee coins" scores 0.66 on the hashing embedder),
+  while "hot water kills coronavirus" vs "cold water kills coronavirus" would score high. Pure thresholds were
+  wrong in both directions, so reuse now needs a cheap-model sameness confirmation on top of a lower candidate
+  threshold.
+
 ## Eval results
 
 Offline mode (frozen evidence, deterministic baseline policy instead of Claude; latency and cost are from stub

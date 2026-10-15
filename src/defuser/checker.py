@@ -32,7 +32,8 @@ from defuser.normalize.fetch import Fetcher
 from defuser.observability import VERIFIER, tracer
 from defuser.render import render_opinion, render_reply, render_simple
 from defuser.sources import publisher_for, tier_for
-from defuser.triage import triage
+from defuser.triage import same_claim, triage
+from defuser.verifier import verify
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ class CheckResult:
     followup: bool = False
     latency_ms: int = 0
     replayed_steps: int = 0
+    cache_hit: str = "none"
+    claim_id: int | None = None
 
     def trace(self) -> dict:
         return {
@@ -87,6 +90,7 @@ class CheckResult:
             ],
             "replayed_steps": self.replayed_steps,
             "needs_review": self.needs_review,
+            "cache_hit": self.cache_hit,
         }
 
 
@@ -104,7 +108,7 @@ class Checker:
         self.image_backend = image_backend
 
     async def check(
-        self, msg: CanonicalMessage, run_id: str | None = None, max_cost: float | None = None
+        self, msg: CanonicalMessage, run_id: str | None = None, max_cost: float | None = None, cache=None
     ) -> CheckResult:
         s = get_settings()
         run_id = run_id or str(uuid.uuid4())
@@ -150,6 +154,21 @@ class Checker:
                     journal,
                 )
 
+            same_claim_id = None
+            if cache is not None:
+                cand = await cache.candidate(tri.claims[0].canonical_en)
+                if cand is not None and await same_claim(
+                    self.llm, journal, meter, tri.claims[0].canonical_en, cand
+                ):
+                    same_claim_id = cand[0]
+                    hit = await cache.load(cand[0], cand[1])
+                    cached = (
+                        await self._from_cache(hit, msg, lang, run_id, journal, meter, tri) if hit else None
+                    )
+                    if cached is not None:
+                        span.set_attribute("cache_hit", hit.hit)
+                        return self._done(cached, t0, journal)
+
             toolbox = Toolbox(
                 self.backends, self.fetcher, image_backend=self.image_backend if msg.image else None
             )
@@ -183,6 +202,7 @@ class Checker:
                 attempts,
                 meter,
             )
+            res.claim_id = same_claim_id
             self._apply_policy(res)
             res.followup = res.verdict == Verdict.UNVERIFIED or bool(
                 inv.followup and res.verdict == Verdict.UNVERIFIED
@@ -190,6 +210,57 @@ class Checker:
             res.reply = render_reply(res.draft, res.evidence, lang, seed=run_id, truncated=msg.truncated)
             span.set_attribute("verdict", res.verdict.value)
             return self._done(res, t0, journal)
+
+    async def from_cache(self, hit, msg: CanonicalMessage, lang: str, run_id: str) -> CheckResult | None:
+        """Answer from a pre-triage cache hit (exact text or same image). None means: do a full check."""
+        s = get_settings()
+        t0 = time.monotonic()
+        journal = await Journal(self.pool, run_id).load()
+        meter = Meter(max_cost=s.max_cost_per_message_usd, max_steps=s.max_steps_per_message)
+        res = await self._from_cache(hit, msg, resolve(lang), run_id, journal, meter, None)
+        return self._done(res, t0, journal) if res else None
+
+    async def _from_cache(self, hit, msg, lang, run_id, journal, meter, tri) -> CheckResult | None:
+        draft = hit.draft or Draft(verdict=hit.verdict, confidence=hit.confidence)
+        if draft.verdict != hit.verdict:
+            return None
+        report = verify(draft, hit.evidence)
+        if not report.passed:
+            return None  # stored evidence no longer supports it (e.g. evidence purged): re-investigate
+        attempts = 0
+        if draft.reasons and hit.lang and hit.lang != lang:
+            if tri is None:
+                return None  # different language on a fingerprint hit: let triage + claim cache handle it
+            inv = Investigation(
+                verdict=hit.verdict.value,
+                confidence=hit.confidence,
+                rationale="cached verdict",
+                finished=True,
+                stop="cache",
+            )
+            new_draft, new_report, attempts = await compose(
+                self.llm, journal, meter, tri, inv, hit.evidence, lang
+            )
+            if new_report.passed and new_draft.verdict == hit.verdict:
+                draft, report = new_draft, new_report
+        res = CheckResult(
+            run_id,
+            "checked",
+            draft.verdict,
+            draft.confidence,
+            "",
+            lang,
+            tri,
+            None,
+            draft,
+            dict(hit.evidence),
+            report,
+            attempts,
+            meter,
+        )
+        res.cache_hit, res.claim_id = hit.hit, hit.claim_id
+        res.reply = render_reply(draft, hit.evidence, lang, seed=run_id, truncated=msg.truncated)
+        return res
 
     def _preload_message_links(self, toolbox: Toolbox, msg: CanonicalMessage) -> None:
         from defuser.agent.tools import ToolOutcome
