@@ -19,7 +19,7 @@ from pathlib import Path
 
 from defuser.checker import Checker
 from defuser.evals.fixtures import backends_from_case
-from defuser.models import CanonicalMessage, ChatRef, ImageContent, Verdict
+from defuser.models import AudioContent, CanonicalMessage, ChatRef, ImageContent, Verdict
 from defuser.normalize.message import fetch_links
 from defuser.normalize.text import clean, extract_urls, guess_lang
 from defuser.verifier import norm
@@ -45,8 +45,14 @@ async def build_message(case: dict, fetcher) -> CanonicalMessage:
         truncated=truncated,
         forwarded=True,
     )
-    if case.get("image_ocr"):
-        msg.image = ImageContent(ocr_text=case["image_ocr"], phash="0" * 16)
+    if case.get("image"):
+        msg.image = ImageContent(
+            ocr_text=case["image"].get("ocr", ""),
+            phash="0" * 16,
+            matching_pages=case["image"].get("matching_pages", []),
+        )
+    if case.get("audio"):
+        msg.audio = AudioContent(transcript=case["audio"]["transcript"], duration_s=30)
     msg.links = await fetch_links(fetcher, extract_urls(msg.combined_text()))
     msg.lang = guess_lang(msg.combined_text())
     return msg
@@ -72,7 +78,7 @@ async def run_case(case: dict, llm, sem: asyncio.Semaphore) -> dict:
         msg = await build_message(case, fetcher)
         t0 = time.monotonic()
         try:
-            res = await Checker(llm, backends, fetcher, pool=None).check(msg)
+            res = await Checker(llm, backends, fetcher, pool=None, image_backend=object()).check(msg)
             err = None
         except Exception as e:  # noqa: BLE001 - an exception is itself a failed case
             res, err = None, f"{type(e).__name__}: {e}"

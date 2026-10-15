@@ -122,6 +122,8 @@ class BaselinePolicyLLM:
         sources = _sources(seen) + _sources(case)
         if step == 0:
             calls = [("search_factchecks", {"query": claim, "language": "en"})]
+            if "reverse_image_search is available" in case:
+                calls.append(("reverse_image_search", {}))
             calls += [("check_url_safety", {"url": u}) for u in links[:2]]
             return tool_response(*calls)
         if step == 1:

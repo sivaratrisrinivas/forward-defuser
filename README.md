@@ -77,6 +77,21 @@ A Fly.io config is in `deploy/fly/fly.toml`.
   record for the claim carries a false/misleading rating (and FALSE when one says true), and rejects a "supports"
   label on a record rated false.
 
+### M2 — images and voice notes
+
+- Images: byte and pixel caps (decompression bombs rejected), downscale to 1600 px, 64-bit perceptual hash,
+  then Google Vision text + web detection (or Claude vision for OCR when no Google key). Web detection backs the
+  `reverse_image_search` tool, which fetches earlier appearances on fact-checker / news / official sites as
+  evidence (the old-photo-new-context case).
+- Voice notes: ffmpeg to 16 kHz mono FLAC, capped at 5 minutes (longer notes are cut and the reply says so),
+  55-second chunks transcribed in parallel with Google Speech-to-Text.
+- Five image/voice cases added to the golden set (160 total).
+- **What broke:** the first perceptual-hash test compared two different drawings and failed; rewritten to compare
+  a picture with its resized, re-compressed forward (distance ≤ 6) against a different picture (> 6).
+- **Not verified here:** Vision `images:annotate` and Speech `v1p1beta1/speech:recognize` request/response shapes
+  (Google docs were unreachable from the build sandbox); both are isolated in `media.py` and failures degrade to a
+  text-only check.
+
 ## Eval results
 
 Offline mode (frozen evidence, deterministic baseline policy instead of Claude; latency and cost are from stub
@@ -84,7 +99,7 @@ token counts, not real). Live-model numbers need an `ANTHROPIC_API_KEY` and run 
 
 | Set | Cases | Accuracy | False-debunk rate | Citation validity | Abstention on unseen | Containment |
 |---|---|---|---|---|---|---|
-| Golden | 155 | 0.729 | 0.0 | 1.0 (127 citations) | 1.0 | n/a |
+| Golden | 160 | 0.719 | 0.0 | 1.0 (130 citations) | 1.0 | n/a |
 | Adversarial | 20 | 0.85 | 0.0 | 1.0 | n/a | 1.0 |
 | Hijacked model (adversarial + 40 golden) | 60 | n/a | n/a | 1.0 | n/a | 1.0 |
 

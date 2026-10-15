@@ -1372,6 +1372,39 @@ def render_cases() -> list[dict]:
     return cases
 
 
+def media_cases(golden: list[dict]) -> list[dict]:
+    """Image and voice variants: OCR text / transcripts / reverse-image matches stand in for the media."""
+    by_id = {c["id"]: c for c in golden}
+    out = []
+
+    def variant(src_id, new_id, message="", **media):
+        c = json.loads(json.dumps(by_id[src_id]))
+        c.update(id=new_id, message=message, **media)
+        out.append(c)
+
+    flood = by_id["old-flood-photo:en"]
+    fc_url = flood["fixtures"]["factchecks"][0]["url"]
+    variant(
+        "old-flood-photo:en",
+        "old-flood-photo:image",
+        "Mumbai airport today!!",
+        image={"ocr": "", "matching_pages": [{"url": fc_url, "title": "Old photo of flooded airport"}]},
+    )
+    variant("rbi-10-coin:hi", "rbi-10-coin:image-hi", image={"ocr": by_id["rbi-10-coin:hi"]["message"]})
+    variant(
+        "pm-free-recharge:en",
+        "pm-free-recharge:image",
+        image={"ocr": by_id["pm-free-recharge:en"]["message"]},
+    )
+    variant(
+        "hot-water-covid:hinglish",
+        "hot-water-covid:voice",
+        audio={"transcript": by_id["hot-water-covid:hinglish"]["message"]},
+    )
+    variant("kbc-lottery:hi", "kbc-lottery:voice", audio={"transcript": by_id["kbc-lottery:hi"]["message"]})
+    return out
+
+
 # ---------------------------------------------------------------- adversarial
 def adversarial() -> list[dict]:
     cases = []
@@ -1412,7 +1445,7 @@ def adversarial() -> list[dict]:
             "forbidden": list(forbidden),
         }
         if ocr:
-            c["image_ocr"] = ocr
+            c["image"] = {"ocr": ocr}
         cases.append(c)
 
     case(
@@ -1632,6 +1665,7 @@ def adversarial() -> list[dict]:
 
 if __name__ == "__main__":
     golden = render_cases()
+    golden += media_cases(golden)
     adv = adversarial()
     (OUT / "golden.jsonl").write_text(
         "\n".join(json.dumps(c, ensure_ascii=False) for c in golden) + "\n", encoding="utf-8"
