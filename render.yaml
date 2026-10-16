@@ -1,0 +1,22 @@
+# Render Blueprint: one free web service running API + worker (ROLE=all).
+# Database: Neon (free Postgres with pgvector). Redis: Upstash (free). Secrets are set in the dashboard (sync: false).
+services:
+  - type: web
+    name: forward-defuser
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - { key: ROLE, value: all }
+      - { key: ENV, value: prod }
+      - { key: DB_POOL_SIZE, value: "6" }
+      - { key: PUBLIC_BASE_URL, sync: false }
+      - { key: DATABASE_URL, sync: false }
+      - { key: REDIS_URL, sync: false }
+      - { key: DATA_KEY, sync: false }
+      - { key: HASH_PEPPER, sync: false }
+      - { key: ADMIN_TOKEN, sync: false }
+      - { key: ANTHROPIC_API_KEY, sync: false }
+      - { key: TELEGRAM_BOT_TOKEN, sync: false }
+      - { key: TELEGRAM_WEBHOOK_SECRET, sync: false }
+      - { key: GOOGLE_API_KEY, sync: false }

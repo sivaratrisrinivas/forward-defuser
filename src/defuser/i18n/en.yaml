@@ -1,0 +1,35 @@
+name: English
+reviewed: true
+headline:
+  FALSE: "❌ This one is false."
+  MISLEADING: "⚠️ This is misleading."
+  TRUE: "✅ This one checks out."
+  SATIRE: "😄 This is satire, a joke article, not news."
+  SCAM: "🚨 This is a scam. Please don't click or reply."
+  UNVERIFIED: "🤔 I can't confirm this yet."
+opener:
+  FALSE: ["Good thing you checked before sending it on!", "Nice instinct to double-check this one."]
+  MISLEADING: ["There's a grain of truth here, but the story around it is twisted."]
+  TRUE: ["Good news: this one is real."]
+  SATIRE: ["It's written to be funny, so it fooled a lot of people."]
+  SCAM: ["These fraudsters are getting clever, so you were right to be careful."]
+  UNVERIFIED: ["Nobody reliable has confirmed or debunked this yet."]
+next_step:
+  FALSE: "👉 Please don't forward this. If you got it in a group, you could share this reply there."
+  MISLEADING: "👉 Better not to forward it as it is."
+  TRUE: "👉 Fine to share, ideally with the source link."
+  SATIRE: "👉 Enjoy the joke, but don't forward it as news."
+  SCAM: "👉 Don't click, pay or share any OTP/PIN. Report it at 1930 (cyber fraud helpline) or cybercrime.gov.in, and block the sender."
+  UNVERIFIED: "👉 Please hold off on forwarding it for now. I'll keep watching and message you if fact-checkers publish something."
+sources: "Sources:"
+opinion: "🙂 This is an opinion or a wish, not a fact I can check. Nothing to debunk here!"
+nothing_to_check: "🙂 I couldn't find a claim to check in this. Forward me the message you're unsure about."
+busy: "😅 I'm getting a lot of messages right now. Please try again in a little while."
+rate_limited: "🙏 That's a lot of messages at once! Please give me a minute and try again."
+too_long: "(The message was very long, so I checked the first part.)"
+help: "Forward me any message you're unsure about (text, photo, voice note or link) and I'll check it. In a group, reply to the message with /check. Send /forget to delete your data."
+start: "Namaste! 🙏 Forward me any message you're unsure about, and I'll tell you if it's true, false or a scam, with sources."
+forget_done: "Done. I've deleted what I had stored about you."
+update: "📢 Update on a message you asked me about earlier:"
+error: "😅 Something went wrong on my side. Please try again in a little while."
+help_wa_group: "In WhatsApp groups I can't see the message you replied to. Send /check followed by the text, or forward the message to me directly."

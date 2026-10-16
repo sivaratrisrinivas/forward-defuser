@@ -1,0 +1,33 @@
+# Alternative to Cloud Run. `fly launch --no-deploy --copy-config`, then `fly secrets set ...` and `fly deploy`.
+app = "forward-defuser"
+primary_region = "bom"
+
+[build]
+  dockerfile = "../../Dockerfile"
+
+[processes]
+  api = "sh -c 'defuser-migrate && uvicorn defuser.app:app --host 0.0.0.0 --port 8080'"
+  worker = "defuser-worker"
+
+[http_service]
+  internal_port = 8080
+  processes = ["api"]
+  force_https = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "3s"
+
+[[vm]]
+  processes = ["api"]
+  memory = "512mb"
+
+[[vm]]
+  processes = ["worker"]
+  memory = "2gb"
+  cpus = 2

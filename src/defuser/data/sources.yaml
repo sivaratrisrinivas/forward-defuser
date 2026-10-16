@@ -1,0 +1,63 @@
+# Source tiers are decided by domain here, never by the model. Matching is on the host or a parent domain
+# (e.g. "www.altnews.in" matches "altnews.in"; "altnews.in.example.com" does not).
+factchecker:
+  - altnews.in
+  - boomlive.in
+  - factly.in
+  - vishvasnews.com
+  - newschecker.in
+  - newsmobile.in
+  - newsmeter.in
+  - factcrescendo.com
+  - thequint.com/news/webqoof
+  - indiatoday.in/fact-check
+  - factcheck.afp.com
+  - fullfact.org
+  - snopes.com
+  - politifact.com
+  - reuters.com/fact-check
+  - youturn.in
+  - dfrac.org
+official:
+  - pib.gov.in
+  - gov.in        # any *.gov.in
+  - nic.in        # any *.nic.in
+  - rbi.org.in
+  - who.int
+  - mohfw.gov.in
+  - icmr.gov.in
+  - eci.gov.in
+  - cybercrime.gov.in
+  - uidai.gov.in
+  - npci.org.in
+  - sebi.gov.in
+  - incometax.gov.in
+  - cdc.gov
+news:
+  - thehindu.com
+  - indianexpress.com
+  - hindustantimes.com
+  - ndtv.com
+  - timesofindia.indiatimes.com
+  - livemint.com
+  - business-standard.com
+  - scroll.in
+  - theprint.in
+  - bbc.com
+  - bbc.co.uk
+  - reuters.com
+  - apnews.com
+  - aajtak.in
+  - jagran.com
+  - bhaskar.com
+  - amarujala.com
+  - deccanherald.com
+  - news18.com
+satire:
+  - fakingnews.com
+  - theonion.com
+  - thefauxy.com
+  - babylonbee.com
+  - newsthump.com
+  - thedailymash.co.uk
+  - waterfordwhispersnews.com

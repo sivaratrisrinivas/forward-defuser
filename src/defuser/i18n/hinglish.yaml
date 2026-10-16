@@ -1,0 +1,35 @@
+name: Hinglish (Hindi in Latin script, mixed with English)
+reviewed: false  # written by the build; have a native speaker review before launch
+headline:
+  FALSE: "❌ Yeh baat jhooth hai."
+  MISLEADING: "⚠️ Yeh misleading hai."
+  TRUE: "✅ Yeh baat sahi hai."
+  SATIRE: "😄 Yeh satire hai, mazaak wala article, asli news nahi."
+  SCAM: "🚨 Yeh scam hai. Please click ya reply mat kijiye."
+  UNVERIFIED: "🤔 Abhi main iski pushti nahi kar pa raha."
+opener:
+  FALSE: ["Achha kiya jo forward karne se pehle pooch liya!", "Sahi socha aapne ki pehle check kar lein."]
+  MISLEADING: ["Isme thodi sachchai hai, par kahani ghuma-phira ke batayi gayi hai."]
+  TRUE: ["Achhi khabar: yeh baat asli hai."]
+  SATIRE: ["Yeh hasane ke liye likha gaya tha, isliye kaafi log confuse ho gaye."]
+  SCAM: ["Aajkal thag bahut smart ho gaye hain, aapne savdhani rakh ke bilkul sahi kiya."]
+  UNVERIFIED: ["Kisi bharosemand source ne abhi tak isko confirm ya debunk nahi kiya hai."]
+next_step:
+  FALSE: "👉 Please isse aage forward mat kijiye. Group mein aaya ho toh wahan yeh reply share kar sakte hain."
+  MISLEADING: "👉 Isse aise hi forward na karna behtar hai."
+  TRUE: "👉 Share kar sakte hain, ho sake toh source link ke saath."
+  SATIRE: "👉 Mazaak enjoy kijiye, par isse news samajh ke forward mat kijiye."
+  SCAM: "👉 Koi link mat kholiye, paise mat bhejiye, OTP/PIN kisi ko mat bataiye. 1930 (cyber fraud helpline) ya cybercrime.gov.in par complaint kijiye aur sender ko block kijiye."
+  UNVERIFIED: "👉 Abhi isse forward mat kijiye. Main nazar rakhunga aur fact-check aate hi aapko bataunga."
+sources: "Sources:"
+opinion: "🙂 Yeh ek opinion ya wish hai, koi fact nahi jo check ho sake."
+nothing_to_check: "🙂 Isme check karne layak koi claim nahi mila. Jis message pe shak ho, woh bhejiye."
+busy: "😅 Abhi bahut saare messages aa rahe hain. Thodi der baad try kijiye."
+rate_limited: "🙏 Ek saath bahut saare messages! Ek minute ruk ke phir bhejiye."
+too_long: "(Message bahut lamba tha, isliye maine pehla hissa check kiya.)"
+help: "Jis bhi message pe shak ho (text, photo, voice note ya link), mujhe forward kijiye, main check karke bataunga. Group mein us message pe /check likh ke reply kijiye. Apna data delete karne ke liye /forget bhejiye."
+start: "Namaste! 🙏 Jis message pe shak ho, mujhe forward kijiye. Main source ke saath bataunga ki woh sach hai, jhooth hai ya scam."
+forget_done: "Ho gaya. Aapke baare mein jo bhi data tha, maine delete kar diya."
+update: "📢 Aapne pehle jis message ke baare mein poocha tha, uspe update:"
+error: "😅 Meri taraf se kuch gadbad ho gayi. Thodi der baad try kijiye."
+help_wa_group: "WhatsApp group mein main woh message nahi dekh pata jispe aapne reply kiya. /check ke baad message ka text likhiye, ya woh message seedha mujhe forward kijiye."

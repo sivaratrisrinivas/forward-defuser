@@ -1,0 +1,66 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: fd, POSTGRES_PASSWORD: fd, POSTGRES_DB: fd_test }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U fd" --health-interval 2s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql://fd:fd@localhost:5432/fd_test
+      REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { version: "0.11.32" }
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      # Offline eval: frozen evidence + replayed/stub model. Fails on any gate regression (see evals/README.md).
+      - run: uv run defuser-eval --mode offline --gate evals/baseline.json --out eval-report.json
+      # Short load test with simulated model errors and webhook redeliveries: every message answered exactly once.
+      - run: |
+          PGPASSWORD=fd psql -h localhost -U fd -d fd_test -c "CREATE DATABASE fd_load"
+          DATABASE_URL=postgresql://fd:fd@localhost:5432/fd_load REDIS_URL=redis://localhost:6379/14 \
+            uv run python scripts/loadtest.py --messages 150 --rps 30 --llm-delay 0.1 --llm-error-rate 0.05 \
+            --check --out loadtest-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: eval-report, path: "eval-report.json\nloadtest-report.json" }
+
+  eval-live:
+    # Real Claude on frozen evidence. Runs only when the repo has an ANTHROPIC_API_KEY secret.
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ github.event_name == 'pull_request' }}
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+      - uses: astral-sh/setup-uv@v4
+        if: env.HAS_KEY == 'true'
+        with: { version: "0.11.32" }
+      - if: env.HAS_KEY == 'true'
+        run: uv sync --frozen && uv run defuser-eval --mode live-model --gate evals/baseline.json --out eval-live.json
+        env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_KEY == 'true' && always()
+        with: { name: eval-live, path: eval-live.json }
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t defuser:ci .
