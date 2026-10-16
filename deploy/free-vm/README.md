@@ -16,7 +16,7 @@ stops), expire their free database, or don't offer pgvector. One VM runs everyth
 3. On the VM: `curl -fsSL https://get.docker.com | sh`, then `git clone <your repo> && cd forward-defuser`.
 4. `cp .env.example .env`, then `uv run python scripts/gen_keys.py >> .env` (or run `scripts/gen_keys.py` anywhere
    and paste the values). Edit `.env`: `PUBLIC_BASE_URL=https://<hostname>`, `SITE_DOMAIN=<hostname>`,
-   `POSTGRES_PASSWORD=<long random string>`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `ANTHROPIC_API_KEY`,
+   `POSTGRES_PASSWORD=<long random string>` and `DATABASE_URL=postgresql://fd:<the same password>@db:5432/fd`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `ANTHROPIC_API_KEY`,
    `GOOGLE_API_KEY`, and any optional keys. The file stays on the VM and is gitignored.
 5. `docker compose -f deploy/free-vm/docker-compose.yml --env-file .env up -d --build`. Caddy fetches the HTTPS
    certificate on first start (needs ports 80 and 443 reachable and the hostname resolving to the VM).
