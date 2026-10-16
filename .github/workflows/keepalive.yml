@@ -1,0 +1,12 @@
+# Free hosts put idle services to sleep. This pings /healthz every 10 minutes so Telegram replies stay fast.
+# Set the repository variable KEEPALIVE_URL (e.g. https://forward-defuser.onrender.com) to turn it on.
+name: keepalive
+on:
+  schedule: [{ cron: "*/10 * * * *" }]
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: ${{ vars.KEEPALIVE_URL != '' }}
+    steps:
+      - run: curl -fsS --retry 3 --max-time 60 "${{ vars.KEEPALIVE_URL }}/healthz"

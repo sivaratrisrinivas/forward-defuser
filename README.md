@@ -25,6 +25,10 @@ Tests need Postgres with pgvector and Redis (`docker compose up -d db redis`, th
 uv run pytest -q
 ```
 
+## Deploy for free without a VM
+
+See `deploy/free-cloud/README.md` (Render + Neon + Upstash + GitHub Actions keep-alive, via `render.yaml`).
+
 ## Deploy for free (one VM)
 
 The recommended free route is one always-on VM (Oracle Cloud Always Free, or any Linux box with Docker) running
